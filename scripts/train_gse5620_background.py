@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""GSE5620 (AtGenExpress 非生物胁迫对照系列, 36 样本) 背景表达增强。
+"""Background-expression augmentation from 36 GSE5620 AtGenExpress control samples.
 
-- GSE5620 下载子集全部为 Control-Shoots/Roots 时间点样本（无处理样本，无标签泄漏）
-- GPL198 探针映射到 AT 基因（median 聚合），36 维对照表达作为第 4 模态
-- 协议与主实验一致；无背景表达的对照 = modality_graph_*_v2_domf 已有结果
+- The selected GSE5620 samples are all untreated shoots/roots controls.
+- GPL198 probes map to AT genes (median aggregation); 36 control-expression
+  measurements provide a fourth modality.
+- The protocol matches the main experiment; existing modality_graph_*_v2_domf
+  runs provide the no-background-expression comparison.
 """
 import argparse
 import copy
@@ -33,9 +35,9 @@ GPL198 = f"{BASE}/raw/geo/GPL198.annot.gz"
 
 def ensure_gpl198():
     if not os.path.exists(GPL198):
-        # FTP 无 annot 文件；改从 GEO 平台页面取表（含 AGI 列）
+        # Obtain the AGI annotation column from the GEO platform table.
         url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL198&targ=self&form=text&view=data"
-        print("下载 GPL198 平台表 ...")
+        print("Downloading GPL198 platform table ...")
         urllib.request.urlretrieve(url, "/tmp/gpl198.txt")
         with open("/tmp/gpl198.txt") as f, open(GPL198, "w") as out:
             in_table = False
@@ -51,13 +53,13 @@ def ensure_gpl198():
 
 
 def background_matrix():
-    """返回 DataFrame: index=AT 基因, columns=36 个对照样本（log2 表达已标准化）"""
+    """Return log2-normalized expression indexed by AT gene for 36 controls."""
     ensure_gpl198()
     mat = pd.read_csv(GSE5620, sep="\t", comment="!", index_col=0)
-    # 探针 -> 基因（GPL198 表的 AGI 列）
+    # Map probes to genes using the GPL198 AGI column.
     header = open(GPL198).readline().rstrip("\n").split("\t")
     gene_col = header.index("AGI") if "AGI" in header else None
-    assert gene_col is not None, "GPL198 无 AGI 列"
+    assert gene_col is not None, "GPL198 has no AGI column"
     probe2gene = {}
     for line in open(GPL198):
         if line.startswith("ID"):
@@ -71,7 +73,7 @@ def background_matrix():
     mat["gene"] = [probe2gene.get(p, "") for p in mat.index]
     mat = mat[mat.gene != ""]
     agg = mat.groupby("gene").median()
-    print(f"GSE5620 背景矩阵: {agg.shape[0]} 基因 x {agg.shape[1]} 样本（全部对照）")
+    print(f"GSE5620 background matrix: {agg.shape[0]} genes x {agg.shape[1]} control samples")
     return agg
 
 
@@ -95,7 +97,7 @@ def main():
     ntrain = len(train)
     bkg = background_matrix().reindex(proteins.gene).to_numpy(float)
     bkg = np.where(np.isfinite(bkg), bkg, 0.0)
-    # 特征
+    # Features.
     esm = np.load(directory/'esm_embeddings.npz')
     esm_x = esm['embeddings'].astype('float32')
     s1 = StandardScaler().fit(esm_x[train])

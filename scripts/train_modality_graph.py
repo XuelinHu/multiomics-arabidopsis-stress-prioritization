@@ -111,14 +111,14 @@ def main():
     parser.add_argument('--epochs',type=int,default=150)
     parser.add_argument('--no-graph',action='store_true')
     parser.add_argument('--sequence-mode',choices=['composition','esm'],default='composition',
-                        help='esm: ESM-2 t33_650M 嵌入经 PCA(256, 仅训练集拟合) 替换序列组成')
+                        help='esm: replace sequence composition with ESM-2 t33_650M embeddings and training-only PCA(256)')
     parser.add_argument('--ablate',choices=['none','sequence','expression','domain','go'],default='none',
-                        help='去掉一个特征模态（消融）；PPI 消融用 --no-graph')
-    parser.add_argument('--run-suffix',default='',help='附加到 run 目录名（区分标签版本等）')
+                        help='remove one feature modality; use --no-graph for PPI ablation')
+    parser.add_argument('--run-suffix',default='',help='append to the run directory name (e.g., to distinguish label versions)')
     parser.add_argument('--domain-mode',choices=['multihot','filtered'],default='multihot',
-                        help='filtered: 仅训练集频率>=20 的 IPR 类 + 域数覆盖特征 + 未注释指示位')
+                        help='filtered: IPR terms with training frequency >=20, domain-count feature, and annotation indicator')
     parser.add_argument('--go-mode',choices=['none','filtered'],default='none',
-                        help='filtered: GO 词表(训练集频率>=50) multi-hot + log GO 数 + 未注释指示位，作为第 4 模态')
+                        help='filtered: GO terms with training frequency >=50, log GO count, and annotation indicator as a fourth modality')
     parser.add_argument('--data-root', type=Path, help='Override KGMULTIOMICS_DATA_ROOT')
     parser.add_argument('--output-root', type=Path, default=Path('results/development'))
     parser.add_argument('--thresholds', default='',
@@ -152,7 +152,7 @@ def main():
     if args.domain_mode=='multihot':
         domain_matrix=mlb.transform([d&known for d in domains]).astype('float32')
     else:
-        # filtered: 仅训练集频率>=20 的 IPR 类 + 注释域数(log) + 是否未注释指示位
+        # Filtered IPR terms plus log domain count and annotation indicator.
         from collections import Counter
         freq=Counter()
         for i in train: freq.update(domains[i])
@@ -174,9 +174,9 @@ def main():
         mods['sequence']=torch.tensor(scaler.transform(data['sequence_composition'][used]),dtype=torch.float32,device=device)
     else:
         esm=np.load(directory/'esm_embeddings.npz')
-        assert np.array_equal(esm['proteins'],data['proteins']),'ESM ID 顺序与 inputs.npz 不一致'
+        assert np.array_equal(esm['proteins'],data['proteins']),'ESM protein order does not match inputs.npz'
         esm_x=esm['embeddings'].astype('float32')
-        # 泄漏规则：标准化参数与 PCA 仅用训练集拟合
+        # Fit scaling and PCA only on training proteins.
         esm_scaler=StandardScaler().fit(esm_x[train])
         pca=PCA(n_components=256,random_state=args.seed).fit(esm_scaler.transform(esm_x[train]))
         esm_proj=pca.transform(esm_scaler.transform(esm_x[used])).astype('float32')
@@ -212,7 +212,7 @@ def main():
         mods['go']=torch.tensor(go_matrix[used],device=device)
         scalers.append({'feature':'go_filtered','go_vocab_size':len(gov)})
     if args.ablate!='none':
-        assert args.ablate in mods, f'无法消融 {args.ablate}'
+        assert args.ablate in mods, f'Cannot ablate {args.ablate}'
         del mods[args.ablate]
     tensors=list(mods.values())
     ppi_mode = 'none' if args.no_graph else args.ppi_mode

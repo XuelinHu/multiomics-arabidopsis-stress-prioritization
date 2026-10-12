@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""GSE41935 跨平台验证：Col 生态型叶片 Ctrl vs Salt / Ctrl vs Heat（NimbleGen 微阵列）。
+"""Cross-platform GSE41935 comparison of Col leaves under salt and heat stress.
 
-- 解析 series matrix（行为 AT 基因 ID），按标题 Leaf-{Eco}-{Cond}-rep 抽样本
-- 每基因 log2FC(Salt/Ctrl) 与 log2FC(Heat/Ctrl)，与最终预测做 Spearman + AUROC(top20%)
-- 该数据集不参与任何训练/特征选择
+- Parse the NimbleGen series matrix and select Leaf-{Eco}-{Cond}-rep samples.
+- Compare gene-level salt/control and heat/control log2FC with final predictions
+  using Spearman correlation and AUROC for the top 20% response group.
+- GSE41935 contributes no training examples or selected features.
 """
 import argparse, gzip, json, math
 import os
@@ -22,7 +23,7 @@ def main():
     parser.add_argument('--results-dir', type=Path, default=Path('results'))
     args = parser.parse_args()
     results = args.results_dir
-    # 样本标题
+    # Sample titles.
     ts = []
     for line in gzip.open(MATRIX, "rt"):
         if line.startswith("!Sample_title"):
@@ -39,23 +40,23 @@ def main():
         if len(parts) >= 4 and parts[0] == "Leaf" and parts[1] == "Col":
             cond = parts[2]
             if cond in sel:
-                sel[cond].append(a)  # 每条件全部重复
-    print("Col 样本:", {c: len(v) for c, v in sel.items()})
+                sel[cond].append(a)  # Retain every replicate per condition.
+    print("Col samples:", {c: len(v) for c, v in sel.items()})
     mat = pd.read_csv(MATRIX, sep="\t", comment="!", index_col=0)
-    print("矩阵:", mat.shape)
+    print("Matrix:", mat.shape)
     used = []
     for c, gsms in sel.items():
         if gsms:
             mat[c] = mat[gsms].mean(axis=1)
             used.append(c)
     sub = mat[used]
-    sub.index = [g.split(".")[0] for g in sub.index]  # 行即 AT 基因 ID
+    sub.index = [g.split(".")[0] for g in sub.index]  # Rows are AT gene IDs.
     agg = sub.groupby(sub.index).median()
     out = {}
     for cond in ("Salt", "Heat"):
         if cond not in agg.columns:
             continue
-        fc = (agg[cond] - agg["Ctrl"]).to_dict()  # 表达已 log2
+        fc = (agg[cond] - agg["Ctrl"]).to_dict()  # Expression is already log2.
         genes = list(fc)
         inputs = np.load(f"{BASE}/processed/protein_inputs/inputs.npz", allow_pickle=True)
         pred = np.load(results/'final_predictions.npz', allow_pickle=True)
@@ -66,7 +67,7 @@ def main():
             if g in g2i and math.isfinite(fc[g]):
                 rows.append((g, fc[g], g2i[g]))
         if len(rows) < 100:
-            print(f"{cond}: 映射基因不足 ({len(rows)})，跳过")
+            print(f"{cond}: insufficient mapped genes ({len(rows)}); skipping")
             continue
         fcs = np.array([r[1] for r in rows])
         idxs = [r[2] for r in rows]
@@ -92,7 +93,7 @@ def main():
         out[cond] = res
     with open(results/'external_gse41935_validation.json', 'w') as handle:
         json.dump(out, handle, indent=2)
-    print(f"已写入 {results/'external_gse41935_validation.json'}")
+    print(f"Saved {results/'external_gse41935_validation.json'}")
 
 
 if __name__ == "__main__":

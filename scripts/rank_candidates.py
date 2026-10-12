@@ -1,11 +1,11 @@
-"""未表征蛋白候选排序：预测概率 + 多源证据表。
+"""Rank low-annotation protein candidates with predictions and evidence.
 
-注释覆盖度定义（依据本研究使用的本地 GO 与 InterPro 记录）：
-  tier1 按本文标准无注释: GO==0 且 InterPro==0
-  tier2 稀疏注释: GO<=2 且 InterPro<=1，排除 tier1
-证据列：预测概率(S/M/H)、对照表达、PPI 度、PPI 邻域阳性比例、
-        同源簇大小与簇内已注释成员数、域/GO 数、in_string。
-输出 results/candidate_proteins.csv；表述使用"候选功能关联"。
+Annotation tiers use the local GO and InterPro records in this study:
+  tier1: GO==0 and InterPro==0;
+  tier2: GO<=2 and InterPro<=1, excluding tier1.
+Evidence includes task scores, control expression, PPI degree, positive-neighbor
+fractions, homology-cluster size and annotation, domain/GO counts, and STRING coverage.
+Output: results/candidate_proteins.csv. Scores indicate candidate associations.
 """
 import argparse
 import sys
@@ -46,7 +46,7 @@ def main():
     tier1 = (go_counts == 0) & (dom_counts == 0)
     tier2 = (go_counts <= 2) & (dom_counts <= 1) & ~tier1
 
-    # PPI 度与邻域证据
+    # PPI degree and neighbor evidence.
     lookup = {f'3702.{p}': i for i, p in enumerate(data['proteins'])}
     rr, cc = [], []
     for chunk in pd.read_csv(BASE/'raw/string/3702.protein.links.v12.0.txt.gz', sep=' ', chunksize=200000):
@@ -71,7 +71,7 @@ def main():
             if len(observed):
                 neigh_pos[i, task] = labels[observed, task].mean()
 
-    # 同源簇：protein -> representative
+    # Map each protein to its homology-cluster representative.
     cluster = pd.read_csv(directory/'homology_cluster.tsv', sep='\t', header=None, names=['protein', 'rep'])
     sizes = cluster.groupby('rep').size()
     rep_of = dict(zip(cluster.protein, cluster.rep))
@@ -104,11 +104,11 @@ def main():
             })
     out = pd.DataFrame(rows).sort_values('max_prob', ascending=False)
     out.to_csv(results/'candidate_proteins.csv', index=False)
-    print(f'候选蛋白: tier1={len(out[out.tier=="tier1_unannotated"])}, tier2={len(out[out.tier=="tier2_sparse"])}')
-    print('Top-10 候选:')
+    print(f'Candidates: tier1={len(out[out.tier=="tier1_unannotated"])}, tier2={len(out[out.tier=="tier2_sparse"])}')
+    print('Top 10 candidates:')
     print(out.head(10)[['protein', 'gene', 'tier', 'pred_salt', 'pred_mannitol', 'pred_heat',
                         'ppi_degree', 'cluster_annotated_members', 'go_count', 'domain_count']].to_string(index=False))
-    print(f"已写入 {results/'candidate_proteins.csv'}")
+    print(f"Saved {results/'candidate_proteins.csv'}")
 
 
 if __name__ == '__main__':

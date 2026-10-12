@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""横向对比图模型：GCN / GAT / GraphSAGE / JK-Net / CrossRes / CrossRes+JK。
+"""Graph baselines: GCN, GAT, GraphSAGE, JK-Net, CrossRes, and CrossRes+JK.
 
-协议与主实验一致：ESM-PCA256 + 对照表达 + filtered 结构域 拼接为节点特征；
-STRING>=700 邻接（训练图不含验证节点）；掩码加权 BCE；验证宏 AUPRC 早停；3 种子。
-CrossRes 参考 KG-CrossResGNN：双分支（结构 GCNConv / 关系 RGCNConv）+ 跨分支残差交换。
+The protocol matches the main experiment: concatenated ESM-PCA256, untreated
+expression, and filtered domains; STRING>=700 training graph without validation
+nodes; masked weighted BCE; validation macro-AUPRC early stopping; three seeds.
+CrossRes follows KG-CrossResGNN with structural GCNConv and relational RGCNConv
+branches and cross-branch residual exchange.
 """
 import argparse
 import copy
@@ -70,7 +72,7 @@ class SAGE(nn.Module):
 
 
 class JKNet(nn.Module):
-    """GCN + Jumping Knowledge（各层状态拼接）"""
+    """GCN with concatenated layer states via Jumping Knowledge."""
     def __init__(self, in_dim, hidden=128, tasks=3, layers=2):
         super().__init__()
         self.proj = nn.Sequential(nn.Linear(in_dim, hidden), nn.LayerNorm(hidden), nn.GELU())
@@ -87,7 +89,7 @@ class JKNet(nn.Module):
 
 
 class CrossResidualLayer(nn.Module):
-    """双分支（结构 GCN / 关系 RGCN）+ vanilla 跨分支残差交换。"""
+    """Structural GCN and relational RGCN with cross-branch residual exchange."""
     def __init__(self, hidden, num_relations=2):
         super().__init__()
         self.struct = GCNConv(hidden, hidden)
@@ -98,8 +100,8 @@ class CrossResidualLayer(nn.Module):
     def forward(self, hs, hr, ei, et):
         hs_new = torch.nn.functional.gelu(self.struct(hs, ei))
         hr_new = torch.nn.functional.gelu(self.rel(hr, ei, et))
-        hs = hs + hs_new + self.cross_r2s(hr_new)   # 结构分支吸收关系分支
-        hr = hr + hr_new + self.cross_s2r(hs_new)   # 关系分支吸收结构分支
+        hs = hs + hs_new + self.cross_r2s(hr_new)   # Relational to structural.
+        hr = hr + hr_new + self.cross_s2r(hs_new)   # Structural to relational.
         return hs, hr
 
 

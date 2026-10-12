@@ -1,9 +1,10 @@
-"""最终协议：train+val 重训 -> 全蛋白预测 -> 测试集评估。
+"""Final protocol: train+validation refit, proteome prediction, test evaluation.
 
-- 配置：ModalityGraph，ESM-PCA256 + 对照表达 + filtered 结构域 + PPI>=700
-- 标准化/PCA/域词表：只用 train+val 拟合（测试集全程未见）
-- 固定 epoch 数：取开发期同配置 3 种子 best-epoch 的中位数
-- 单种子输出写入 results/corrected，随后由 --aggregate 汇总。
+- Configuration: ModalityGraph, ESM-PCA256, control expression, filtered
+  domains, and PPI>=700.
+- Scaling, PCA, and domain vocabulary are fitted on train+validation only.
+- Fixed epoch count is the median best epoch across three development seeds.
+- Per-seed outputs are written to results/corrected; --aggregate summarizes them.
 """
 import argparse
 import json
@@ -116,14 +117,14 @@ def main():
     train = np.flatnonzero(split.split == 'train')
     valid = np.flatnonzero(split.split == 'validation')
     test = np.flatnonzero(split.split == 'test')
-    fit = np.concatenate([train, valid])   # 最终拟合集
+    fit = np.concatenate([train, valid])   # Final fit set.
     nfit = len(fit)
-    used = np.arange(len(data['proteins']))  # 全蛋白（推理图）
+    used = np.arange(len(data['proteins']))  # Full-proteome inference graph.
     lookup = {f'3702.{p}': i for i, p in enumerate(data['proteins'])}
     assert not np.intersect1d(fit, test).size
     assert len(np.unique(fit)) == nfit
 
-    # --- 特征（train+val 拟合） ---
+    # Fit features on train+validation.
     esm = np.load(directory/'esm_embeddings.npz')
     assert np.array_equal(esm['proteins'], data['proteins'])
     esm_x = esm['embeddings'].astype('float32')
@@ -152,7 +153,7 @@ def main():
             torch.tensor(expr, device=device),
             torch.tensor(domain_matrix, device=device)]
 
-    # --- 全蛋白 PPI 推理图 ---
+    # Full-proteome PPI inference graph.
     rr, cc, ww = [], [], []
     for chunk in pd.read_csv(BASE/'raw/string/3702.protein.links.v12.0.txt.gz', sep=' ', chunksize=200000):
         chunk = chunk[chunk.combined_score >= 700]
@@ -174,13 +175,13 @@ def main():
     fit_graph = normalize(adjacency[fit][:, fit])
     full_graph = normalize(adjacency)
 
-    # --- 固定 epoch：开发期同配置 best-epoch 中位数 ---
+    # Fixed epoch count: median development best epoch for this configuration.
     best_epochs = []
     for s in SEEDS:
         h = pd.read_csv(f'results/development/modality_graph_seed{s}_esm_v2_domf/history.csv')
         best_epochs.append(int(h.loc[h.validation_macro_auprc.idxmax(), 'epoch']))
     epochs = int(np.ceil(np.median(best_epochs)))
-    print(f'开发期 best-epoch: {best_epochs} -> 固定 {epochs} epochs', flush=True)
+    print(f'Development best epochs: {best_epochs} -> fixed {epochs} epochs', flush=True)
 
     fit_labels = torch.tensor(data['labels'][fit], device=device)
     fit_masks = torch.tensor(data['label_mask'][fit], device=device)
@@ -201,7 +202,7 @@ def main():
             losses = torch.nn.functional.binary_cross_entropy_with_logits(
                 logits, fit_labels, pos_weight=negative/positive, reduction='none')
             loss = (losses * fit_masks).sum()/fit_masks.sum()
-            assert torch.isfinite(loss), f'seed {seed} epoch {epoch} 非有限 loss'
+            assert torch.isfinite(loss), f'seed {seed} epoch {epoch}: nonfinite loss'
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
             optimizer.step()
@@ -227,7 +228,7 @@ def main():
         output = CORRECTED/f'seed_{seed}_predictions.npz'
         np.savez_compressed(output, proteins=data['proteins'], predictions=p.astype('float32'),
                             seed=np.array(seed), epochs=np.array(epochs))
-        print(f'seed {seed} 完成 (final loss {loss.item():.4f})', flush=True)
+        print(f'seed {seed} complete (final loss {loss.item():.4f})', flush=True)
 
 
 if __name__ == '__main__':

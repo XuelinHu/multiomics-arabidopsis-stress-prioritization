@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""GSE41935 跨平台多任务训练扩展：Col 生态型 Ctrl vs Salt / Ctrl vs Heat 秩基标签。
+"""Cross-platform GSE41935 multitask extension with Col salt and heat rank labels.
 
-- 标签（预注册）：log2FC top-25% 阳性、bottom-25% 对照、中间掩码（与干旱扩展同规则）
-- 作为第 4、5 任务（salt_cross、heat_cross）与 S/M/H 并联训练 ModalityGraph（5 任务）
-- GSE41935 仅用于标签，不参与特征标准化/PCA/词表
+- Labels: top 25% log2FC positive, bottom 25% control, middle masked.
+- Salt_cross and heat_cross extend ModalityGraph to five parallel tasks.
+- GSE41935 supplies labels only, not scaling, PCA, or vocabularies.
 """
 import argparse
 import copy
@@ -62,7 +62,7 @@ def cross_labels(proteins_df):
         mask = (vals >= pos_thr) | (vals <= neg_thr)
         lab[~mask] = 0.0
         out[cond] = lab, mask
-        print(f"GSE41935 {cond}: 阳性 {int(lab.sum())}, 掩码 {int(mask.sum())} (top25>={pos_thr:.2f}, bottom25<={neg_thr:.2f})")
+        print(f"GSE41935 {cond}: {int(lab.sum())} positives, {int(mask.sum())} observed labels (top25>={pos_thr:.2f}, bottom25<={neg_thr:.2f})")
     return out
 
 
@@ -89,7 +89,7 @@ def main():
     lab_h, mask_h = cross['Heat']
     labels = np.concatenate([data['labels'], lab_s[:, None], lab_h[:, None]], axis=1)
     masks = np.concatenate([data['label_mask'], mask_s[:, None], mask_h[:, None]], axis=1)
-    # 特征（与主实验一致）
+    # Features match the main experiment.
     esm = np.load(directory/'esm_embeddings.npz')
     esm_x = esm['embeddings'].astype('float32')
     s1 = StandardScaler().fit(esm_x[train])

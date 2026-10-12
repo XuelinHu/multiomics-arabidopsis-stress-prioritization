@@ -99,7 +99,7 @@ def build_graphs(directory, device, seed):
     def mask_train(dtype, s, t):
         if dtype == ('protein', 'ppi', 'protein'):
             return (s < ntrain) & (t < ntrain)
-        return s < ntrain  # 结构域/GO 边：源蛋白须在训练集
+        return s < ntrain  # Domain/GO edge source must be a training protein.
 
     def mask_all(dtype, s, t):
         return np.ones(len(s), dtype=bool)
@@ -134,7 +134,7 @@ def main():
     masks = torch.tensor(data['label_mask'][used], device=device)
     positive = (labels[:ntrain] * masks[:ntrain]).sum(0)
     negative = ((1 - labels[:ntrain]) * masks[:ntrain]).sum(0)
-    assert (positive > 0).all() and (negative > 0).all(), '训练集标签退化'
+    assert (positive > 0).all() and (negative > 0).all(), 'Degenerate training labels'
     x_dict = {'protein': x_protein}
     best = -1
     stall = 0

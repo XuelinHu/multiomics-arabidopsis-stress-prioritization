@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""用 ESM-2 t33_650M 预计算拟南芥蛋白嵌入（冻结权重，仅前向）。
+"""Precompute Arabidopsis embeddings with frozen ESM-2 t33_650M weights.
 
-- 输入：UniProt proteome FASTA + inputs.npz 的 27,322 个代表蛋白
-- 输出：data/processed/protein_inputs/esm_embeddings.npz
-    embeddings: (n, 1280) float32，proteins: (n,) 蛋白 ID
-- 长序列（>1022 aa）按 1020aa 窗口、步长 510 滑动，加权平均；
-- fp16 autocast 加速，输出保存为 float32。
+- Input: UniProt proteome FASTA and 27,322 representative proteins in inputs.npz.
+- Output: data/processed/protein_inputs/esm_embeddings.npz, with float32
+  embeddings of shape (n, 1280) and protein IDs of shape (n,).
+- Sequences longer than 1,022 residues use 1,020-residue windows, stride 510,
+  and an equal-weight mean of window embeddings.
+- fp16 autocast accelerates inference; outputs are stored as float32.
 """
 import os, time, argparse
 from pathlib import Path
@@ -19,8 +20,8 @@ FASTA = DATA_ROOT / 'raw/uniprot/UP000006548_proteome.fasta'
 NPZ = DATA_ROOT / 'processed/protein_inputs/inputs.npz'
 OUT = DATA_ROOT / 'processed/protein_inputs/esm_embeddings.npz'
 
-MAXLEN = 1022  # 不含 BOS/EOS；模型上限 1024
-WIN, STRIDE = 1020, 510  # 长序列滑动窗口
+MAXLEN = 1022  # Excludes BOS/EOS; model maximum is 1,024 tokens.
+WIN, STRIDE = 1020, 510  # Sliding windows for long sequences.
 
 def read_fasta(path):
     seqs, cur_id, cur = {}, None, []
@@ -37,7 +38,7 @@ def read_fasta(path):
     return seqs
 
 def windows(seq):
-    """长序列分窗，返回 [(start, end)]，end 为绝对残基位置（python 切片）"""
+    """Return (start, end) residue-index windows for a long sequence."""
     if len(seq) <= MAXLEN:
         return [(0, len(seq))]
     ws = []
@@ -48,24 +49,24 @@ def windows(seq):
         if e == len(seq):
             break
         s += STRIDE
-        if s >= len(seq):  # 兜底：最后一个窗口对齐到末尾
+        if s >= len(seq):  # Align the final window with the sequence end.
             s = len(seq) - WIN
             if (s, len(seq)) in ws:
                 break
-    # 去重并排序
+    # Deduplicate and sort windows.
     return sorted(set(ws))
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch-size", type=int, default=8)
-    ap.add_argument("--max-proteins", type=int, default=0, help="0=全部")
+    ap.add_argument("--max-proteins", type=int, default=0, help="0=all proteins")
     args = ap.parse_args()
 
     d = np.load(NPZ, allow_pickle=True)
     protein_ids = list(d["proteins"][: args.max_proteins] if args.max_proteins else d["proteins"])
     seqs = read_fasta(FASTA)
     missing = [p for p in protein_ids if p not in seqs]
-    assert not missing, f"FASTA 缺少 {len(missing)} 个蛋白: {missing[:5]}"
+    assert not missing, f"FASTA is missing {len(missing)} proteins: {missing[:5]}"
     seqs = {p: seqs[p].rstrip("*") for p in protein_ids}
 
     tok = EsmTokenizer.from_pretrained(str(CKPT))
@@ -78,7 +79,7 @@ def main():
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         for i in range(0, len(protein_ids), args.batch_size):
             batch = protein_ids[i : i + args.batch_size]
-            # 每个蛋白可能拆多个窗口
+            # One protein may have multiple windows.
             flat_ids, flat_seqs, backref = [], [], []
             for p in batch:
                 for (s, e) in windows(seqs[p]):
@@ -92,7 +93,7 @@ def main():
             mask = enc["attention_mask"].unsqueeze(-1)  # (B, L, 1)
             pooled = (h * mask).sum(1) / mask.sum(1).clamp(min=1)  # (B, H)
             pooled = pooled.float().cpu().numpy()
-            # 按蛋白聚合窗口（等权平均）
+            # Aggregate windows per protein with equal weights.
             from collections import defaultdict
             acc = defaultdict(list)
             for p, v in zip(backref, pooled):
@@ -102,13 +103,13 @@ def main():
                 n_done += 1
             if (i // args.batch_size) % 10 == 0:
                 rate = n_done / (time.time() - t0)
-                print(f"[{time.strftime('%H:%M:%S')}] {n_done}/{len(protein_ids)} 蛋白, {rate:.1f} 蛋白/s, "
-                      f"预计剩余 {(len(protein_ids)-n_done)/rate/60:.1f} min", flush=True)
+                print(f"[{time.strftime('%H:%M:%S')}] {n_done}/{len(protein_ids)} proteins, {rate:.1f} proteins/s, "
+                      f"estimated remaining {(len(protein_ids)-n_done)/rate/60:.1f} min", flush=True)
 
     np.savez(OUT, embeddings=emb, proteins=np.array(protein_ids))
-    print(f"DONE {len(protein_ids)} 蛋白, 用时 {(time.time()-t0)/60:.1f} min -> {OUT}", flush=True)
-    # 快速 sanity check
-    print("shape:", emb.shape, "| 有限值:", np.isfinite(emb).all(), "| L2 范数范围:",
+    print(f"DONE {len(protein_ids)} proteins in {(time.time()-t0)/60:.1f} min -> {OUT}", flush=True)
+    # Basic output check.
+    print("shape:", emb.shape, "| finite:", np.isfinite(emb).all(), "| L2 norm range:",
           np.linalg.norm(emb, axis=1).min(), "-", np.linalg.norm(emb, axis=1).max(), flush=True)
 
 if __name__ == "__main__":

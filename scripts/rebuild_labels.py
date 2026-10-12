@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""重建 S/M/H 标签：q/b 阈值敏感性分析 + 应用选定阈值。
+"""Rebuild salt, mannitol, and heat labels and analyze q/b threshold sensitivity.
 
-阳性 = 有限(q) 且 有限(b) 且 q<=Q 且 |b|>=B；对照 = 有限(q) 且 q>=0.5；其余掩码。
-- 默认只做敏感性分析，输出 results/label_sensitivity.csv；
-- --q Q --b B --apply 时把新标签写回 inputs.npz（首次自动备份原文件）。
+Positive: finite q and b, q<=Q, |b|>=B. Control: finite q, q>=0.5.
+Other observations are masked. By default, only write results/label_sensitivity.csv.
+With --apply, update inputs.npz after backing up the original labels.
 """
 import argparse
 import json
@@ -26,7 +26,7 @@ def load():
     return proteins, q, b
 
 def build(q, b, thresholds):
-    """thresholds: {task: (Q, B)}；对照统一 q>=0.5"""
+    """Task thresholds {task: (Q, B)}; controls always require q>=0.5."""
     positive = np.zeros(q.shape, bool)
     for i, t in enumerate('SMH'):
         Q, B = thresholds[t]
@@ -47,7 +47,7 @@ def main():
     proteins, q, b = load()
     n = len(proteins)
     tasks = ['S', 'M', 'H']
-    # 敏感性分析（记录用；最终阈值按任务独立，见 thresholds）
+    # Sensitivity analysis; final thresholds are task-specific.
     rows = []
     for Q in (0.05, 0.01, 0.001):
         for B in (0.0, 0.5, 1.0, 1.5, 2.0):
@@ -71,16 +71,16 @@ def main():
     rows.append(chosen)
     RESULTS.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(RESULTS/'label_sensitivity.csv', index=False)
-    print('敏感性分析(统一阈值) + 最后一行=选定任务独立阈值:')
+    print('Sensitivity analysis (shared thresholds); last row uses selected task-specific thresholds:')
     print(pd.DataFrame(rows).to_string(index=False))
-    print('sensitivity 表已写入 results/label_sensitivity.csv')
-    # 应用阈值
+    print('Saved sensitivity table to results/label_sensitivity.csv')
+    # Apply selected thresholds.
     if args.apply:
         npz = OUT/'inputs.npz'
         backup = OUT/'inputs_original_labels_v0.npz'
         if not backup.exists():
             shutil.copy2(npz, backup)
-            print('已备份原标签 ->', backup)
+            print('Backed up original labels ->', backup)
         data = np.load(npz, allow_pickle=True)
         np.savez_compressed(npz, sequence_composition=data['sequence_composition'],
                             control_expression=data['control_expression'],
@@ -100,7 +100,7 @@ def main():
                                'nondifferential comparator, not verified biological negative; heat response is '
                                'broad (97% DE at q<=0.05) hence the effect-size floor.')
         json.dump(audit, open(OUT/'audit.json', 'w'), indent=2, ensure_ascii=False)
-        print('已应用任务独立阈值 ->', report)
+        print('Applied task-specific thresholds ->', report)
 
 if __name__ == '__main__':
     main()

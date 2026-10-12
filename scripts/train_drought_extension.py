@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""干旱标签训练扩展：GSE220276 Bulk1 drought0 vs ww0（3v3）秩基标签作为第 4 任务。
+"""Drought-label training extension using GSE220276 Bulk1 drought0 vs ww0 (3v3).
 
-标签（预注册）：log2FC top-25% = 阳性，bottom-25% = 对照，中间掩码；
-与 S/M/H 任务并联训练 ModalityGraph（domf 配置，4 任务），报告 D 任务验证 AUPRC。
-GSE220276 不参与特征标准化/PCA/词表（沿用主实验的 train 拟合）。
+Rank labels use the top 25% log2FC as positives, bottom 25% as controls,
+and mask the middle. Drought is the fourth ModalityGraph task (domf setup).
+GSE220276 does not contribute to scaling, PCA, or vocabulary fitting.
 """
 import argparse
 import copy
@@ -55,8 +55,8 @@ def drought_labels(proteins_df):
     labels = ((vals >= pos_thr)).astype(float)
     masks = (vals >= pos_thr) | (vals <= neg_thr)
     labels[~masks] = 0.0
-    print(f"干旱标签: 阳性 {int(labels.sum())}, 对照 {int(masks.sum())-int(labels.sum())}, "
-          f"掩码 {int((~masks).sum())} (top25%>={pos_thr:.2f}, bottom25%<={neg_thr:.2f})")
+    print(f"Drought labels: {int(labels.sum())} positives, {int(masks.sum())-int(labels.sum())} controls, "
+          f"{int((~masks).sum())} masked (top25%>={pos_thr:.2f}, bottom25%<={neg_thr:.2f})")
     return labels.astype(float), masks
 
 
@@ -81,7 +81,7 @@ def main():
     dlab, dmask = drought_labels(proteins)
     labels = np.concatenate([data['labels'], dlab[:, None]], axis=1)
     masks = np.concatenate([data['label_mask'], dmask[:, None]], axis=1)
-    # 特征（train 拟合，与主实验一致）
+    # Fit features on training proteins as in the main experiment.
     esm = np.load(directory/'esm_embeddings.npz')
     esm_x = esm['embeddings'].astype('float32')
     s1 = StandardScaler().fit(esm_x[train])

@@ -1,7 +1,8 @@
-"""R-GCN 图基线：2 层 RGCNConv（2 关系：PPI 正向+反向）on STRING>=700。
+"""R-GCN graph baseline: two RGCNConv layers (forward/reverse PPI) on STRING>=700.
 
-特征与主模型一致：ESM-PCA256 + 对照表达 + filtered 结构域。
-协议与 train_modality_graph.py 相同：训练图不含验证节点、早停只看验证集、3 种子。
+Features match the main model: ESM-PCA256, control expression, and filtered domains.
+The protocol matches train_modality_graph.py: training graph excludes validation nodes,
+early stopping uses validation data, and three seeds are evaluated.
 """
 import argparse
 import copy
@@ -49,7 +50,7 @@ def build(directory, device, seed):
     used = np.concatenate([train, valid])
     ntrain = len(train)
     lookup = {f'3702.{p}': i for i, p in enumerate(data['proteins'][used])}
-    # 特征（训练集拟合）
+    # Fit feature transformations on training proteins.
     esm = np.load(directory/'esm_embeddings.npz')
     esm_x = esm['embeddings'].astype('float32')
     s1 = StandardScaler().fit(esm_x[train])
@@ -74,7 +75,7 @@ def build(directory, device, seed):
         flags[i, 0] = 1.0 if d else 0.0
     dom = np.concatenate([rows, counts, flags], axis=1).astype('float32')
     x = torch.tensor(np.concatenate([seq, expr, dom[used]], axis=1), device=device)
-    # 边（2 关系：正向 + 反向）
+    # Two edge relations: forward and reverse.
     rr, cc = [], []
     for chunk in pd.read_csv(BASE/'raw/string/3702.protein.links.v12.0.txt.gz', sep=' ', chunksize=200000):
         chunk = chunk[chunk.combined_score >= 700]
