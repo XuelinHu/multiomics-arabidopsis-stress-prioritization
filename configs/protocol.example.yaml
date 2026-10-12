@@ -1,0 +1,19 @@
+# Reference values for the reported workflow; scripts use CLI flags and
+# KGMULTIOMICS_DATA_ROOT rather than loading this file automatically.
+species: Arabidopsis thaliana
+sequence_model: esm2_t33_650M_UR50D
+sequence_pca_components: 256
+domain_min_training_frequency: 20
+string_version: '12.0'
+string_min_combined_score: 700
+development_seeds: [17, 42, 2026]
+labels:
+  salt: {q_max: 0.05, abs_b_min: 0.0}
+  mannitol: {q_max: 0.05, abs_b_min: 0.5}
+  heat: {q_max: 0.001, abs_b_min: 1.5}
+  comparator_q_min: 0.5
+evaluation:
+  split: homology_cluster
+  selection_partition: validation
+  final_fit_partitions: [train, validation]
+  final_report_partition: test

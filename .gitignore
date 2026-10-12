@@ -1,0 +1,12 @@
+/data/
+/results/
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.log
+__pycache__/
+*.py[cod]
+.env
+.venv/
+.ipynb_checkpoints/
