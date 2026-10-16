@@ -54,9 +54,9 @@ python scripts/train_modality_graph.py --sequence-mode esm --domain-mode filtere
 
 The released scripts are limited to analyses described in the manuscript: ModalityGraph and its GO comparison, HGT (hidden=256, heads=8), R-GCN, GCN, GAT, GraphSAGE, JK-GCN, the listed logistic/MMseqs2 baselines, label and STRING controls, and the reported external comparisons. No CrossRes, ESM fine-tuning, exploratory ranking, or unvalidated audit script is included. `run_baselines.py` refuses to rebuild the official split. `final_evaluate.py` uses the manuscript's fixed 20-epoch train+validation refit protocol; the public HF weights and processed data are the exact deployment artifacts. Use `python scripts/<name>.py --help` where supported. The held-out test workflow is for a model and protocol already selected on validation data; do not use test outputs for model selection. After preparing aligned inputs and the chosen weights, `predict_deployment.py` produces inference scores without reading response labels.
 
-## Data availability (Chinese)
+## Data availability
 
-公开代码仓库为 `https://github.com/XuelinHu/multiomics-arabidopsis-stress-prioritization`（commit `5ab9b6d`）。固定划分、处理后特征、封存预测、测试指标和完整低注释候选排序已公开在 Hugging Face 数据集仓库 `https://huggingface.co/datasets/xuelinhu/kg-multiomics-plant-protein-prediction`（revision `71fe857b`）。最终无 GO ModalityGraph 的三个部署权重及对应预处理文件已公开在 `https://huggingface.co/xuelinhu/modalitygraph-arabidopsis-stress`（revision `9dd713f`）。公开资源只包含终稿规定的最终部署材料，不包含探索性、未验证或已废弃的实验脚本与 checkpoint。
+The public code repository is `https://github.com/XuelinHu/multiomics-arabidopsis-stress-prioritization`. The fixed split, processed features, archived predictions, test metrics, and complete low-annotation candidate ranking are publicly available in the Hugging Face dataset repository `https://huggingface.co/datasets/xuelinhu/kg-multiomics-plant-protein-prediction`. The three final no-GO ModalityGraph deployment weights and matching preprocessing archives are publicly available at `https://huggingface.co/xuelinhu/modalitygraph-arabidopsis-stress`. The release contains only the final deployment artifacts specified by the manuscript; exploratory, unvalidated, and superseded scripts and checkpoints are not included.
 
 ## Data layout
 
