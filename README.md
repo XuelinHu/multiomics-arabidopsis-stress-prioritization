@@ -53,7 +53,7 @@ The example protocol in `configs/protocol.example.yaml` records the task-specifi
 python scripts/train_modality_graph.py --sequence-mode esm --domain-mode filtered --seed 17
 ```
 
-Graph baselines, GO-augmented fitting, label sensitivity and external comparisons have separate entry points in `scripts/`. Use `python scripts/<name>.py --help` where supported. The held-out test workflow in `final_evaluate.py` is for a model and protocol already selected on validation data; do not use its test outputs for model selection. After preparing all required aligned inputs and the chosen weights, `predict_deployment.py` produces inference scores without reading response labels.
+The released scripts are limited to analyses described in the manuscript: ModalityGraph and its GO comparison, HGT, R-GCN, GCN, GAT, GraphSAGE, JK-GCN, the listed logistic/MMseqs2 baselines, label and STRING controls, and the reported external comparisons. No CrossRes, ESM fine-tuning, exploratory ranking, or unvalidated audit script is included. Use `python scripts/<name>.py --help` where supported. The held-out test workflow in `final_evaluate.py` is for a model and protocol already selected on validation data; do not use its test outputs for model selection. After preparing all required aligned inputs and the chosen weights, `predict_deployment.py` produces inference scores without reading response labels.
 
 ## Data layout
 

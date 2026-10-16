@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Graph baselines: GCN, GAT, GraphSAGE, JK-Net, CrossRes, and CrossRes+JK.
+"""Graph baselines: GCN, GAT, GraphSAGE, and JK-Net.
 
 The protocol matches the main experiment: concatenated ESM-PCA256, untreated
 expression, and filtered domains; STRING>=700 training graph without validation
 nodes; masked weighted BCE; validation macro-AUPRC early stopping; three seeds.
-CrossRes follows KG-CrossResGNN with structural GCNConv and relational RGCNConv
-branches and cross-branch residual exchange.
 """
 import argparse
 import copy
@@ -21,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import torch
 from torch import nn
-from torch_geometric.nn import GCNConv, GATConv, SAGEConv, RGCNConv
+from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 BASE = Path(os.environ.get('KGMULTIOMICS_DATA_ROOT', Path(__file__).resolve().parents[1] / 'data'))
@@ -88,45 +86,6 @@ class JKNet(nn.Module):
         return self.head(torch.cat(outs, dim=-1))
 
 
-class CrossResidualLayer(nn.Module):
-    """Structural GCN and relational RGCN with cross-branch residual exchange."""
-    def __init__(self, hidden, num_relations=2):
-        super().__init__()
-        self.struct = GCNConv(hidden, hidden)
-        self.rel = RGCNConv(hidden, hidden, num_relations)
-        self.cross_s2r = nn.Linear(hidden, hidden)
-        self.cross_r2s = nn.Linear(hidden, hidden)
-
-    def forward(self, hs, hr, ei, et):
-        hs_new = torch.nn.functional.gelu(self.struct(hs, ei))
-        hr_new = torch.nn.functional.gelu(self.rel(hr, ei, et))
-        hs = hs + hs_new + self.cross_r2s(hr_new)   # Relational to structural.
-        hr = hr + hr_new + self.cross_s2r(hs_new)   # Structural to relational.
-        return hs, hr
-
-
-class CrossRes(nn.Module):
-    def __init__(self, in_dim, hidden=128, tasks=3, layers=2, jk=False):
-        super().__init__()
-        self.proj = nn.Sequential(nn.Linear(in_dim, hidden), nn.LayerNorm(hidden), nn.GELU())
-        self.s_in = nn.Linear(hidden, hidden)
-        self.r_in = nn.Linear(hidden, hidden)
-        self.layers = nn.ModuleList([CrossResidualLayer(hidden) for _ in range(layers)])
-        self.jk = jk
-        out_dim = hidden * 2 * (layers + 1) if jk else hidden * 2
-        self.head = nn.Linear(out_dim, tasks)
-
-    def forward(self, x, ei, et):
-        x = self.proj(x)
-        hs, hr = torch.relu(self.s_in(x)), torch.relu(self.r_in(x))
-        outs = [torch.cat([hs, hr], dim=-1)]
-        for layer in self.layers:
-            hs, hr = layer(hs, hr, ei, et)
-            outs.append(torch.cat([hs, hr], dim=-1))
-        fused = torch.cat(outs, dim=-1) if self.jk else outs[-1]
-        return self.head(fused)
-
-
 def build(directory, device, seed):
     data = np.load(directory/'inputs.npz')
     proteins = pd.read_csv(directory/'proteins.tsv', sep='\t').fillna('')
@@ -187,7 +146,7 @@ def build(directory, device, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--model', required=True, choices=['gcn', 'gat', 'sage', 'jk', 'cross', 'cross_jk'])
+    ap.add_argument('--model', required=True, choices=['gcn', 'gat', 'sage', 'jk'])
     ap.add_argument('--seed', type=int, default=17)
     ap.add_argument('--epochs', type=int, default=150)
     ap.add_argument('--run-suffix', default='_v2')
@@ -204,14 +163,9 @@ def main():
         model = GAT(x.shape[1])
     elif args.model == 'sage':
         model = SAGE(x.shape[1])
-    elif args.model == 'jk':
-        model = JKNet(x.shape[1])
-    elif args.model == 'cross':
-        model = CrossRes(x.shape[1], jk=False)
     else:
-        model = CrossRes(x.shape[1], jk=True)
+        model = JKNet(x.shape[1])
     model = model.to(device)
-    need_et = args.model in ('cross', 'cross_jk')
     optimizer = torch.optim.AdamW(model.parameters(), lr=.001, weight_decay=.0001)
     run = Path('results/development')/f'{args.model}_seed{args.seed}{args.run_suffix}'
     run.mkdir(parents=True, exist_ok=True)
@@ -228,7 +182,7 @@ def main():
     for epoch in range(args.epochs):
         model.train()
         optimizer.zero_grad()
-        logits = model(x[:ntrain], tr_ei, tr_et) if need_et else model(x[:ntrain], tr_ei)
+        logits = model(x[:ntrain], tr_ei)
         losses = torch.nn.functional.binary_cross_entropy_with_logits(
             logits, labels[:ntrain], pos_weight=negative/positive, reduction='none')
         loss = (losses * masks[:ntrain]).sum()/masks[:ntrain].sum()
@@ -239,7 +193,7 @@ def main():
         optimizer.step()
         model.eval()
         with torch.no_grad():
-            p = (model(x, va_ei, va_et) if need_et else model(x, va_ei))[ntrain:].sigmoid().cpu().numpy()
+            p = model(x, va_ei)[ntrain:].sigmoid().cpu().numpy()
         yt = data['labels'][valid]
         mt = data['label_mask'][valid]
         ap = [average_precision_score(yt[mt[:, t], t], p[mt[:, t], t]) for t in range(3)]
@@ -269,7 +223,7 @@ def main():
         'seed': args.seed, 'model': args.model,
         'features': 'ESM-PCA256 + control expression + filtered domains',
         'ppi': 'STRING >=700', 'labels': 'v2', 'test_evaluated': False,
-        'note': 'CrossRes follows the dual-branch cross-residual design of KG-CrossResGNN, adapted to node-level classification'}, indent=2))
+        'note': 'Development baseline; held-out test is not evaluated by this script.'}, indent=2))
 
 
 if __name__ == '__main__':
