@@ -175,13 +175,9 @@ def main():
     fit_graph = normalize(adjacency[fit][:, fit])
     full_graph = normalize(adjacency)
 
-    # Fixed epoch count: median development best epoch for this configuration.
-    best_epochs = []
-    for s in SEEDS:
-        h = pd.read_csv(f'results/development/modality_graph_seed{s}_esm_v2_domf/history.csv')
-        best_epochs.append(int(h.loc[h.validation_macro_auprc.idxmax(), 'epoch']))
-    epochs = int(np.ceil(np.median(best_epochs)))
-    print(f'Development best epochs: {best_epochs} -> fixed {epochs} epochs', flush=True)
+    # The final manuscript protocol fixes the train+validation refit at 20 epochs.
+    epochs = 20
+    print(f'Using manuscript fixed final-fit budget: {epochs} epochs', flush=True)
 
     fit_labels = torch.tensor(data['labels'][fit], device=device)
     fit_masks = torch.tensor(data['label_mask'][fit], device=device)

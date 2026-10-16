@@ -40,10 +40,9 @@ python scripts/compute_esm_embeddings.py --batch-size 8
 
 Before running these commands, place the GSE146206 supplemental workbook, family SOFT and SRA run table; the UniProt proteome FASTA; and STRING v12 files at the paths expected by the scripts. The UniProt mapping command queries the current service; use an archived mapping snapshot for exact historical replication. `rebuild_labels.py --apply` updates the local `inputs.npz` after saving a backup. The ESM-2 checkpoint is expected at `data/raw/esm/esm2_t33_650M_UR50D`.
 
-Generate the grouped split with MMseqs2, then run the included baseline script, which writes `split.tsv` from `homology_cluster.tsv`:
+Use the released fixed split from the paired Hugging Face dataset repository. The public baseline script validates that split and never overwrites it:
 
 ```bash
-mmseqs easy-cluster data/processed/protein_inputs/representatives.fasta data/processed/protein_inputs/homology data/mmseqs_tmp --min-seq-id 0.3 -c 0.8 -s 7.5
 python scripts/run_baselines.py
 ```
 
@@ -53,7 +52,11 @@ The example protocol in `configs/protocol.example.yaml` records the task-specifi
 python scripts/train_modality_graph.py --sequence-mode esm --domain-mode filtered --seed 17
 ```
 
-The released scripts are limited to analyses described in the manuscript: ModalityGraph and its GO comparison, HGT, R-GCN, GCN, GAT, GraphSAGE, JK-GCN, the listed logistic/MMseqs2 baselines, label and STRING controls, and the reported external comparisons. No CrossRes, ESM fine-tuning, exploratory ranking, or unvalidated audit script is included. Use `python scripts/<name>.py --help` where supported. The held-out test workflow in `final_evaluate.py` is for a model and protocol already selected on validation data; do not use its test outputs for model selection. After preparing all required aligned inputs and the chosen weights, `predict_deployment.py` produces inference scores without reading response labels.
+The released scripts are limited to analyses described in the manuscript: ModalityGraph and its GO comparison, HGT (hidden=256, heads=8), R-GCN, GCN, GAT, GraphSAGE, JK-GCN, the listed logistic/MMseqs2 baselines, label and STRING controls, and the reported external comparisons. No CrossRes, ESM fine-tuning, exploratory ranking, or unvalidated audit script is included. `run_baselines.py` refuses to rebuild the official split. `final_evaluate.py` uses the manuscript's fixed 20-epoch train+validation refit protocol; the public HF weights and processed data are the exact deployment artifacts. Use `python scripts/<name>.py --help` where supported. The held-out test workflow is for a model and protocol already selected on validation data; do not use test outputs for model selection. After preparing aligned inputs and the chosen weights, `predict_deployment.py` produces inference scores without reading response labels.
+
+## Data availability (Chinese)
+
+公开代码仓库为 `https://github.com/XuelinHu/multiomics-arabidopsis-stress-prioritization`（commit `5ab9b6d`）。固定划分、处理后特征、封存预测、测试指标和完整低注释候选排序已公开在 Hugging Face 数据集仓库 `https://huggingface.co/datasets/xuelinhu/kg-multiomics-plant-protein-prediction`（revision `71fe857b`）。最终无 GO ModalityGraph 的三个部署权重及对应预处理文件已公开在 `https://huggingface.co/xuelinhu/modalitygraph-arabidopsis-stress`（revision `9dd713f`）。公开资源只包含终稿规定的最终部署材料，不包含探索性、未验证或已废弃的实验脚本与 checkpoint。
 
 ## Data layout
 

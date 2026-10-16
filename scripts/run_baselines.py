@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -18,15 +17,20 @@ def main():
     clusters=pd.read_csv(BASE/'homology_cluster.tsv',sep='\t',header=None,names=['cluster','protein'])
     assert not clusters.protein.duplicated().any()
     group=clusters.set_index('protein').loc[data['proteins'],'cluster'].to_numpy()
-    index=np.arange(len(group))
-    dev,test=next(GroupShuffleSplit(n_splits=1,test_size=.2,random_state=2026).split(index,groups=group))
-    tr,va=next(GroupShuffleSplit(n_splits=1,test_size=.25,random_state=2027).split(dev,groups=group[dev]))
-    train,val=dev[tr],dev[va]
-    assert not (set(group[train])&set(group[val]) or set(group[dev])&set(group[test]))
-    split=np.full(len(group),'test',dtype='<U10');split[train]='train';split[val]='validation'
-    pd.DataFrame({'protein':data['proteins'],'gene':data['genes'],'cluster':group,'split':split}).to_csv(BASE/'split.tsv',sep='\t',index=False)
-    features={'composition':data['sequence_composition'],'control_expression':data['control_expression'],
-              'composition_control':np.concatenate([data['sequence_composition'],data['control_expression']],axis=1)}
+    split_path=BASE/'split.tsv'
+    if not split_path.exists():
+        raise FileNotFoundError('Fixed split.tsv is required. Obtain the released split or create it with a separately audited protocol; this script never rebuilds it.')
+    split_frame=pd.read_csv(split_path,sep='\t')
+    if not np.array_equal(split_frame.protein.to_numpy(),data['proteins']):
+        raise ValueError('Existing split.tsv protein order does not match inputs.npz')
+    split=split_frame.split.to_numpy()
+    train=np.flatnonzero(split=='train'); val=np.flatnonzero(split=='validation')
+    test=np.flatnonzero(split=='test')
+    if (len(train),len(val),len(test)) != (16665,5203,5454):
+        raise ValueError('Refusing non-final split sizes; expected 16665/5203/5454')
+    if set(split_frame.loc[train,'cluster']) & set(split_frame.loc[val,'cluster']) or set(split_frame.loc[train,'cluster']) & set(split_frame.loc[test,'cluster']):
+        raise ValueError('Existing split.tsv has cross-partition homology clusters')
+    features={'composition':data['sequence_composition'],'control_expression':data['control_expression']}
     results=[]
     for seed in [17,42,2026]:
         for t,task in enumerate(['salt','mannitol_osmotic','heat']):
