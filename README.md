@@ -56,7 +56,7 @@ The released scripts are limited to analyses described in the manuscript: Modali
 
 ## Data availability
 
-The public code repository is `https://github.com/XuelinHu/multiomics-arabidopsis-stress-prioritization`. The fixed split, processed features, archived predictions, test metrics, and complete low-annotation candidate ranking are publicly available in the Hugging Face dataset repository `https://huggingface.co/datasets/xuelinhu/kg-multiomics-plant-protein-prediction`. The three final no-GO ModalityGraph deployment weights and matching preprocessing archives are publicly available at `https://huggingface.co/xuelinhu/modalitygraph-arabidopsis-stress`. The release contains only the final deployment artifacts specified by the manuscript; exploratory, unvalidated, and superseded scripts and checkpoints are not included.
+The public code repository is `https://github.com/XuelinHu/multiomics-arabidopsis-stress-prioritization`. The fixed split assignments, processed feature matrices, archived predictions, test metrics, and complete low-annotation candidate ranking are publicly available in the Hugging Face dataset repository `https://huggingface.co/datasets/xuelinhu/kg-multiomics-plant-protein-prediction`. The three final no-GO ModalityGraph deployment weights and matching preprocessing archives are publicly available at `https://huggingface.co/xuelinhu/modalitygraph-arabidopsis-stress`. The release contains only the final deployment artifacts specified by the manuscript; exploratory, unvalidated, and superseded scripts and checkpoints are not included.
 
 ## Data layout
 
